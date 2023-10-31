@@ -4,7 +4,7 @@
 		if (!element) throw `Pirsch script ${element} tag not found!`;
 		return element;
 	}
-	function isTrackingDisabled(scriptTag) {
+	function trackingIsDisabled(scriptTag) {
 		return (
 			navigator.doNotTrack === "1" ||
 			localStorage.getItem("disable_pirsch") ||
@@ -181,37 +181,38 @@
 		"use strict";
 		logPirschEvent();
 		let scriptTag = findScriptTag("#pirschextendedjs");
-		if (isTrackingDisabled(scriptTag)) return;
+		if (trackingIsDisabled(scriptTag)) return;
 		let fileExtensions = [
-				"7z",
-				"avi",
-				"csv",
-				"docx",
-				"exe",
-				"gz",
-				"key",
-				"midi",
-				"mov",
-				"mp3",
-				"mp4",
-				"mpeg",
-				"pdf",
-				"pkg",
-				"pps",
-				"ppt",
-				"pptx",
-				"rar",
-				"rtf",
-				"txt",
-				"wav",
-				"wma",
-				"wmv",
-				"xlsx",
-				"zip",
-			].concat(
-				scriptTag.getAttribute("data-download-extensions")?.split(",") || []
-			),
-			r =
+			"7z",
+			"avi",
+			"csv",
+			"docx",
+			"exe",
+			"gz",
+			"key",
+			"midi",
+			"mov",
+			"mp3",
+			"mp4",
+			"mpeg",
+			"pdf",
+			"pkg",
+			"pps",
+			"ppt",
+			"pptx",
+			"rar",
+			"rtf",
+			"txt",
+			"wav",
+			"wma",
+			"wmv",
+			"xlsx",
+			"zip",
+		].concat(
+			scriptTag.getAttribute("data-download-extensions")?.split(",") || []
+		);
+
+		let r =
 				scriptTag.getAttribute("data-hit-endpoint") ||
 				"https://api.pirsch.io/hit",
 			i =
@@ -224,7 +225,9 @@
 			a = scriptTag.getAttribute("data-domain")
 				? scriptTag.getAttribute("data-domain").split(",") || []
 				: [],
-			pageviewsDisabled = scriptTag.hasAttribute("data-disable-page-views"),
+			A = scriptTag.getAttribute("data-dev");
+
+		let pageviewsDisabled = scriptTag.hasAttribute("data-disable-page-views"),
 			queryDisabled = scriptTag.hasAttribute("data-disable-query"),
 			referrerDisabled = scriptTag.hasAttribute("data-disable-referrer"),
 			resolutionDisabled = scriptTag.hasAttribute("data-disable-resolution"),
@@ -234,7 +237,6 @@
 			),
 			downloadsDisabled = scriptTag.hasAttribute("data-disable-downloads"),
 			sessionsEnabled = scriptTag.hasAttribute("data-enable-sessions"),
-			A = scriptTag.getAttribute("data-dev"),
 			outboundLinkEventName =
 				scriptTag.getAttribute("data-outbound-link-event-name") ||
 				"Outbound Link Click",
@@ -243,7 +245,8 @@
 			notFoundEventName =
 				scriptTag.getAttribute("data-not-found-event-name") ||
 				"404 Page Not Found";
-		pageviewsDisabled ||
+
+		!pageviewsDisabled &&
 			setupTrackingEventListeners(
 				a,
 				A,
@@ -267,20 +270,20 @@
 			document.addEventListener("DOMContentLoaded", () => {
 				addAttributeBasedEventListeners(),
 					addClassBasedEventListeners(),
-					$(),
+					findLinkElements(),
 					j();
 			});
 		function addAttributeBasedEventListeners() {
 			let elements = document.querySelectorAll("[pirsch-event]");
 			for (let element of elements)
 				element.addEventListener("click", () => {
-					k(element);
+					sendAttributeBasedEvent(element);
 				}),
 					element.addEventListener("auxclick", () => {
-						k(element);
+						sendAttributeBasedEvent(element);
 					});
 		}
-		function k(element) {
+		function sendAttributeBasedEvent(element) {
 			let eventName = element.getAttribute("pirsch-event");
 			if (!eventName) {
 				console.error(
@@ -289,75 +292,79 @@
 				);
 				return;
 			}
-			let v = {},
-				b;
-			for (let f of element.attributes)
-				f.name.startsWith("pirsch-meta-")
-					? (v[f.name.substring(12)] = f.value)
-					: f.name.startsWith("pirsch-duration") &&
-					  (b = Number.parseInt(f.value, 10) ?? 0);
-			pirsch(eventName, { meta: v, duration: b });
+			let meta = {},
+				duration;
+			for (let attribute of element.attributes)
+				attribute.name.startsWith("pirsch-meta-")
+					? (meta[attribute.name.substring(12)] = attribute.value)
+					: attribute.name.startsWith("pirsch-duration") &&
+					  (duration = Number.parseInt(attribute.value, 10) ?? 0);
+			pirsch(eventName, { meta: meta, duration: duration });
 		}
 		function addClassBasedEventListeners() {
-			let s = document.querySelectorAll("[class*='pirsch-event=']");
-			for (let n of s)
-				n.addEventListener("click", () => {
-					S(n);
+			let elements = document.querySelectorAll("[class*='pirsch-event=']");
+			for (let element of elements)
+				element.addEventListener("click", () => {
+					sendClassBasedEvent(element);
 				}),
-					n.addEventListener("auxclick", () => {
-						S(n);
+					element.addEventListener("auxclick", () => {
+						sendClassBasedEvent(element);
 					});
 		}
-		function S(s) {
-			let n = "",
-				v = {},
-				b;
-			for (let f of s.classList)
-				if (f.startsWith("pirsch-event=")) {
-					if (((n = f.substring(13).replaceAll("+", " ")), !n)) {
-						console.error("Pirsch event class name must not be empty!", s);
+		function sendClassBasedEvent(element) {
+			let name = "",
+				meta = {},
+				duration;
+			for (let className of element.classList)
+				if (className.startsWith("pirsch-event=")) {
+					// You can combine classes with + symbols, i.e. "pirsch-event=event+with+spaces" -> "event with spaces"
+					if (((name = className.substring(13).replaceAll("+", " ")), !name)) {
+						console.error(
+							"Pirsch event class name must not be empty!",
+							element
+						);
 						return;
 					}
-				} else if (f.startsWith("pirsch-meta-")) {
-					let P = f.substring(12);
-					if (P) {
-						let w = P.split("=");
-						w.length === 2 &&
-							w[1] !== "" &&
-							(v[w[0]] = w[1].replaceAll("+", " "));
+				} else if (className.startsWith("pirsch-meta-")) {
+					let arbitraryDataKey = className.substring(12);
+					if (arbitraryDataKey) {
+						let keyAndValue = arbitraryDataKey.split("=");
+						keyAndValue.length === 2 &&
+							keyAndValue[1] !== "" &&
+							(meta[keyAndValue[0]] = keyAndValue[1].replaceAll("+", " "));
 					}
 				} else
-					f.startsWith("pirsch-duration=") &&
-						(b = Number.parseInt(f.substring(16)) ?? 0);
-			pirsch(n, { meta: v, duration: b });
+					className.startsWith("pirsch-duration=") &&
+						(duration = Number.parseInt(className.substring(16)) ?? 0);
+			pirsch(name, { meta: meta, duration: duration });
 		}
-		function $() {
-			let s = document.getElementsByTagName("a");
-			for (let n of s)
-				!n.hasAttribute("pirsch-ignore") &&
-					!n.classList.contains("pirsch-ignore") &&
-					(isDownloadFileExtension(n.href)
-						? downloadsDisabled || z(n)
-						: outboundLinksDisabled || V(n));
+		function findLinkElements() {
+			let linkElements = document.getElementsByTagName("a");
+			for (let linkElement of linkElements)
+				!linkElement.hasAttribute("pirsch-ignore") &&
+					!linkElement.classList.contains("pirsch-ignore") &&
+					(isDownloadFileExtension(linkElement.href)
+						? downloadsDisabled || addDownloadEventListeners(linkElement)
+						: outboundLinksDisabled || addLinkEventListeners(linkElement));
 		}
-		function V(s) {
-			let n = urlify(s.href);
-			n !== null &&
-				n.hostname !== location.hostname &&
-				(s.addEventListener("click", () =>
-					pirsch(outboundLinkEventName, { meta: { url: n.href } })
+		function addLinkEventListeners(element) {
+			let url = urlify(element.href);
+			url !== null &&
+				url.hostname !== location.hostname &&
+				(element.addEventListener("click", () =>
+					pirsch(outboundLinkEventName, { meta: { url: url.href } })
 				),
-				s.addEventListener("auxclick", () =>
-					pirsch(outboundLinkEventName, { meta: { url: n.href } })
+				element.addEventListener("auxclick", () =>
+					pirsch(outboundLinkEventName, { meta: { url: url.href } })
 				));
 		}
-		function z(s) {
-			let n = X(s.href);
+		function addDownloadEventListeners(s) {
+			let pathname = getFilePathname(s.href);
 			s.addEventListener("click", () =>
-				pirsch(downloadEventName, { meta: { file: n } })
+				pirsch(downloadEventName, { meta: { file: pathname } })
 			),
 				s.addEventListener("auxclick", () =>
-					pirsch(downloadEventName, { meta: { file: n } })
+					pirsch(downloadEventName, { meta: { file: pathname } })
 				);
 		}
 		function isDownloadFileExtension(href) {
@@ -371,11 +378,11 @@
 				return null;
 			}
 		}
-		function X(s) {
+		function getFilePathname(href) {
 			try {
-				return s.toLowerCase().startsWith("http")
-					? new URL(s).pathname
-					: s ?? "(empty)";
+				return href.toLowerCase().startsWith("http")
+					? new URL(href).pathname
+					: href ?? "(empty)";
 			} catch {
 				return "(error)";
 			}
